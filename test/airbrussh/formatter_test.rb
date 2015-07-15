@@ -16,12 +16,6 @@ class Airbrussh::FormatterTest < Minitest::Test
     # Hack to allow SSHKit's local backend to work on Windows
     Etc.stubs(:getpwuid => stub(:name => "user"))
 
-    # Fake SSHKit's command map so it doesn't prefix every cmd with /usr/bin/env
-    fake_map = Hash.new do |hash, command|
-      hash[command] = command.to_s
-    end
-    SSHKit.config.stubs(:command_map => fake_map)
-
     # Force SSHKit to use ANSI color (CI $stdout may not be a TTY)
     @sshkit_color_orig = ENV["SSHKIT_COLOR"]
     ENV["SSHKIT_COLOR"] = "1"
@@ -34,11 +28,18 @@ class Airbrussh::FormatterTest < Minitest::Test
   end
 
   def configure
-    config = Airbrussh::Configuration.new
-    config.log_file = @log_file
-    config.color = false
-    yield(config, SSHKit.config)
-    SSHKit.config.output = formatter_class.new(@output, config)
+    airbrussh_config = Airbrussh::Configuration.new
+    airbrussh_config.log_file = @log_file
+    airbrussh_config.color = false
+
+    sshkit_config = SSHKit.config
+    # clear SSHKit's command map so it doesn't prefix every cmd with /usr/bin/env
+    sshkit_config.command_map = Hash.new do |hash, command|
+      hash[command] = command.to_s
+    end
+
+    yield(airbrussh_config, sshkit_config)
+    sshkit_config.output = formatter_class.new(@output, airbrussh_config)
   end
 
   def test_formats_execute_with_color
